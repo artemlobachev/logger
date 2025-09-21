@@ -1,4 +1,4 @@
-#ifndef LOGGER_HPP
+#ifndef LOGGER_HP
 #define LOGGER_HPP
 
 #include <iostream>
@@ -11,14 +11,46 @@
 #include <iomanip>
 #include <sstream>
 
-// macros for automatically receiving information about the call location
-#define LOG(head, text, style) HtmlLogger::log(head, text, style, __FILE__, __FUNCTION__, __LINE__)
-#define LOG_ERROR(head, text) HtmlLogger::log(head, text, CssFmt::ERROR, __FILE__, __FUNCTION__, __LINE__)
-#define LOG_WARNING(head, text) HtmlLogger::log(head, text, CssFmt::WARNING, __FILE__, __FUNCTION__, __LINE__)
-#define LOG_INFO(head, text) HtmlLogger::log(head, text, CssFmt::INFO, __FILE__, __FUNCTION__, __LINE__)
-#define LOG_SUCCESS(head, text) HtmlLogger::log(head, text, CssFmt::SUCCESS, __FILE__, __FUNCTION__, __LINE__)
-#define LOG_DEBUG(head, text) HtmlLogger::log(head, text, CssFmt::DEBUG, __FILE__, __FUNCTION__, __LINE__)
-#define LOG_DUMP(head, text) HtmlLogger::log(head, text, CssFmt::DUMP, __FILE__, __FUNCTION__, __LINE__)
+#include <execinfo.h>
+#include <cxxabi.h>
+#include <dlfcn.h>
+ 
+// FOR DEBUG
+constexpr bool is_debug = 
+#ifdef DEBUG
+    true;
+#else
+    false;
+#endif
+
+#define AUTO_LOG(level, var) LOG_##level("Auto", #var " = " + HtmlLogger::to_string(var))
+
+#define TIME_BLOCK(name)                                                                                  \
+    auto start_##name = std::chrono::high_resolution_clock::now();                                         \
+    auto end_##name = std::chrono::high_resolution_clock::now();                                            \
+    auto duration_##name = std::chrono::duration_cast<std::chrono::microseconds>(end_##name - start_##name); \
+    LOG_DEBUG("Performance", #name " took %ld microseconds", duration_##name.count());
+
+#define LOG_ASSERT(condition, message, ...)                                     \
+    do {                                                                         \
+        if (!(condition)) {                                                       \
+            LOG_ERROR("Assertion Failed", #condition ": " message, ##__VA_ARGS__); \
+            assert(condition);                                                      \
+        } \
+    } while(0)
+
+// macros for automatically receiving information about the call location with VA_ARGS support
+#define LOG(head, style, ...) HtmlLogger::log(head, HtmlLogger::format_stream(__VA_ARGS__), style, __FILE__, __FUNCTION__, __LINE__)
+#define LOG_ERROR(head, ...) HtmlLogger::log(head, HtmlLogger::format_stream(__VA_ARGS__), CssFmt::ERROR, __FILE__, __FUNCTION__, __LINE__)
+#define LOG_WARNING(head, ...) HtmlLogger::log(head, HtmlLogger::format_stream(__VA_ARGS__), CssFmt::WARNING, __FILE__, __FUNCTION__, __LINE__)
+#define LOG_INFO(head, ...) HtmlLogger::log(head, HtmlLogger::format_stream(__VA_ARGS__), CssFmt::INFO, __FILE__, __FUNCTION__, __LINE__)
+#define LOG_SUCCESS(head, ...) HtmlLogger::log(head, HtmlLogger::format_stream(__VA_ARGS__), CssFmt::SUCCESS, __FILE__, __FUNCTION__, __LINE__)
+#define LOG_DEBUG(head, ...) HtmlLogger::log(head, HtmlLogger::format_stream(__VA_ARGS__), CssFmt::DEBUG, __FILE__, __FUNCTION__, __LINE__)
+#define LOG_DUMP(head, ...) HtmlLogger::log(head, HtmlLogger::format_stream(__VA_ARGS__), CssFmt::DUMP, __FILE__, __FUNCTION__, __LINE__)
+// simplified macros for quick logging with automatic formatting
+#define LOGF(level, format, ...) LOG_##level("Auto", format, ##__VA_ARGS__)
+#define DUMP_VAR(var) LOG_DUMP("Variable Dump", #var " = %s", HtmlLogger::to_string(var).c_str())
+#define TRACE_FUNC() LOG_DEBUG("Function Trace", "Entering function: %s", __FUNCTION__)
 
 namespace CssFmt 
 {
@@ -203,6 +235,14 @@ public:
             file_ << HtmlFmt::closer;
             file_.close();
         }
+    }
+
+    template<typename... Args>
+    static std::string format_stream(Args... args) 
+    {
+        std::stringstream ss;
+        (ss << ... << args);  
+        return ss.str();
     }
 
 private:
